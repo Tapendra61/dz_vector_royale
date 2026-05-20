@@ -2,20 +2,20 @@
     "// Note": "Phase 3 particle emitters per roadmap §7.1. Color arrays are [r, g, b, a] in 0..255.",
 
     "thrust_exhaust": {
-        "// Note":  "Comet-trail tuning. Particles drop nearly in place, drift a touch, and fade. Per-particle alpha + bloom does the work; the cyan→red color shift is intentionally subtle to avoid a rainbow look.",
-        "rate":           140,
-        "speed_min":       0,
-        "speed_max":      30,
-        "spread":          0.35,
-        "lifetime_min":    0.45,
-        "lifetime_max":    0.80,
-        "size_start_min":  4.0,
-        "size_start_max":  6.5,
-        "size_end_min":    0.0,
-        "size_end_max":    0.0,
-        "drag":            1.2,
-        "color_start":   [180, 230, 255, 255],
-        "color_end":     [120,  40,  30,   0]
+        "// Note":  "Comet-trail tuning. Additive blending means stacked particles saturate to white, so colors here are SATURATED (not whitish) and alpha is low — that's how the hue survives overlap.",
+        "rate":            85,
+        "speed_min":        0,
+        "speed_max":       25,
+        "spread":           0.30,
+        "lifetime_min":     0.45,
+        "lifetime_max":     0.75,
+        "size_start_min":   2.6,
+        "size_start_max":   4.2,
+        "size_end_min":     0.0,
+        "size_end_max":     0.0,
+        "drag":             1.6,
+        "color_start":   [ 60, 160, 255, 180],
+        "color_end":     [220,  60,  20,   0]
     },
 
     "bullet_trail": {
