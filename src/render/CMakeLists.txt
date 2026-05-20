@@ -2,6 +2,9 @@ add_library(vector_render STATIC
     camera.cpp
     sprite_renderer.cpp
     hud.cpp
+    post_fx.cpp
+    particles/emitter_spec.cpp
+    particles/particle_system.cpp
 )
 
 target_include_directories(vector_render PUBLIC ${CMAKE_SOURCE_DIR}/src)

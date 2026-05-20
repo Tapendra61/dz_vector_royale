@@ -37,6 +37,7 @@ public:
 
     const std::vector<PickupSystem::Event>&       pickup_events() const { return pickups_.events_this_tick(); }
     const std::vector<HealthSystem::DeathRecord>& deaths()        const { return health_.deaths_this_tick(); }
+    const std::vector<CollisionSystem::Hit>&      hits()          const { return collision_.hits_this_tick(); }
 
 private:
     void spawn_player();

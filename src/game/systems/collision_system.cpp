@@ -10,12 +10,14 @@
 
 #include <raymath.h>
 
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
 namespace vector::game {
 
 void CollisionSystem::tick(ecs::Registry& reg, SpatialHash& hash) {
+    hits_.clear();
     hash.clear();
     // Index everything with a collider AND a ShipComponent (the targets).
     reg.view<TransformComponent, ColliderComponent, ShipComponent>().each(
@@ -47,6 +49,15 @@ void CollisionSystem::tick(ecs::Registry& reg, SpatialHash& hash) {
                     auto& dmg = reg.get_or_emplace<DamageEvent>(target);
                     dmg.amount += bc.damage;
                     dmg.source  = bc.owner_id;
+                    const auto& bvel = reg.get<VelocityComponent>(bullet);
+                    Vector2 in_dir = bvel.linear;
+                    const float l2 = in_dir.x * in_dir.x + in_dir.y * in_dir.y;
+                    if (l2 > 1e-6f) {
+                        const float inv = 1.0f / std::sqrt(l2);
+                        in_dir.x *= inv;
+                        in_dir.y *= inv;
+                    }
+                    hits_.push_back({target, btr.position, in_dir});
                     doomed_bullets.push_back(bullet);
                     break;
                 }
