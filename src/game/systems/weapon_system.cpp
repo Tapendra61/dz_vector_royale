@@ -1,6 +1,7 @@
 #include "game/systems/weapon_system.h"
 
 #include "game/components/bullet.h"
+#include "game/components/emitter_state.h"
 #include "game/components/intent.h"
 #include "game/components/physics.h"
 #include "game/components/render_tag.h"
@@ -58,6 +59,7 @@ void WeaponSystem::tick(ecs::Registry& reg,
         });
         reg.emplace<LifetimeComponent>(b, LifetimeComponent{wpn.bullet_lifetime});
         reg.emplace<RenderComponent>(b, RenderComponent{Shape::Circle, YELLOW, wpn.bullet_radius});
+        reg.emplace<EmitterStateComponent>(b);
     }
 }
 

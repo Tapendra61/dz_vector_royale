@@ -4,6 +4,7 @@
 #include "game/ai/bot_brain.h"
 #include "game/components/ai.h"
 #include "game/components/bullet.h"
+#include "game/components/emitter_state.h"
 #include "game/components/health.h"
 #include "game/components/intent.h"
 #include "game/components/inventory.h"
@@ -108,6 +109,7 @@ void World::spawn_player() {
     reg_.emplace<InventoryComponent>(player_);
     reg_.emplace<IntentComponent>(player_);
     reg_.emplace<StatusEffectComponent>(player_);
+    reg_.emplace<EmitterStateComponent>(player_);
     reg_.emplace<RenderComponent>(player_, RenderComponent{Shape::TriangleShip, SKYBLUE, tuning_.ship.radius});
     give_spawn_protection(reg_, player_, tuning_.ship.spawn_protect_s);
 }
@@ -149,6 +151,7 @@ void World::spawn_bots(int count) {
         reg_.emplace<InventoryComponent>(e);
         reg_.emplace<IntentComponent>(e);
         reg_.emplace<StatusEffectComponent>(e);
+        reg_.emplace<EmitterStateComponent>(e);
         reg_.emplace<AIControllerComponent>(e, preset.ctrl_defaults);
 
         // Color-code archetype so visual distinction is immediate.

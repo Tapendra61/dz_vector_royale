@@ -27,7 +27,8 @@ public:
 
     void tick(float dt);
 
-    ecs::Registry&   registry()       { return reg_; }
+    ecs::Registry&        registry()       { return reg_; }
+    const ecs::Registry&  registry() const { return reg_; }
     const Arena&     arena()    const { return arena_; }
     const Tuning&    tuning()   const { return tuning_; }
     ecs::Entity      player()   const { return player_; }

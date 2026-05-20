@@ -1,5 +1,6 @@
 #include "game/systems/pickup_system.h"
 
+#include "game/components/emitter_state.h"
 #include "game/components/health.h"
 #include "game/components/intent.h"
 #include "game/components/inventory.h"
@@ -51,6 +52,7 @@ void PickupSystem::tick(ecs::Registry& reg, const PickupTuning& tune, float dt) 
             reg.emplace<RenderComponent>(pickup, RenderComponent{
                 Shape::Pickup, Color{120, 220, 140, 255}, tune.radius
             });
+            reg.emplace<EmitterStateComponent>(pickup);
             sp.next_spawn_in = jitter(sp.cooldown, sp.jitter);
             events_.push_back({Event::Spawned, ecs::null_entity});
         });

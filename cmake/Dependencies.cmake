@@ -52,6 +52,22 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(raylib entt spdlog nlohmann_json)
 
+# --- doctest (only when tests are requested) ---
+if(VECTOR_BUILD_TESTS)
+    set(DOCTEST_WITH_TESTS OFF CACHE BOOL "" FORCE)
+    set(DOCTEST_NO_INSTALL ON  CACHE BOOL "" FORCE)
+    # doctest v2.4.11's CMake still declares cmake_minimum_required <3.5,
+    # which CMake 4.x rejects without an explicit policy floor.
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+    FetchContent_Declare(
+        doctest
+        GIT_REPOSITORY https://github.com/doctest/doctest.git
+        GIT_TAG        v2.4.11
+        GIT_SHALLOW    TRUE
+    )
+    FetchContent_MakeAvailable(doctest)
+endif()
+
 # --- Dear ImGui + rlImGui (upstream ships no CMakeLists, vendor target) --
 if(VECTOR_ENABLE_IMGUI)
     FetchContent_Declare(

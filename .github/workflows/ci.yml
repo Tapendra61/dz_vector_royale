@@ -43,10 +43,14 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Configure
-        run: cmake --preset desktop-release
+        run: cmake --preset desktop-release -DVECTOR_BUILD_TESTS=ON
 
       - name: Build
         run: cmake --build --preset desktop-release --parallel
+
+      - name: Test
+        working-directory: build/desktop-release
+        run: ctest --output-on-failure
 
       - name: Upload binary
         uses: actions/upload-artifact@v4

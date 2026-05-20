@@ -12,8 +12,8 @@
 namespace vector::render {
 
 void HUD::drawScreen(const game::World& world, int screen_w, int screen_h) {
-    const auto& reg = const_cast<game::World&>(world).registry();
-    auto player = world.player();
+    const auto& reg    = world.registry();
+    const auto  player = world.player();
     if (!reg.valid(player)) return;
 
     const auto* hp  = reg.try_get<game::HealthComponent>(player);

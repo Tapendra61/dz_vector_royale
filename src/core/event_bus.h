@@ -13,13 +13,17 @@ namespace vector::core {
 // gameplay events (e.g., death, pickup, mode change) — *not* for hot loops.
 class EventBus {
 public:
+    // RAII handle that owns the subscriber's lifetime. While the
+    // Subscription is alive, callbacks fire. When it goes out of scope,
+    // the shared_ptr drops to 0, the bus's weak_ptr expires, and the bus
+    // prunes the entry on the next publish.
     class Subscription {
     public:
         Subscription() = default;
-        Subscription(std::weak_ptr<void> handle) : handle_(std::move(handle)) {}
-        bool valid() const { return !handle_.expired(); }
+        explicit Subscription(std::shared_ptr<void> handle) : handle_(std::move(handle)) {}
+        bool valid() const { return static_cast<bool>(handle_); }
     private:
-        std::weak_ptr<void> handle_;
+        std::shared_ptr<void> handle_;
         friend class EventBus;
     };
 
@@ -27,8 +31,8 @@ public:
     Subscription subscribe(Fn&& fn) {
         auto handler = std::make_shared<std::function<void(const Event&)>>(std::forward<Fn>(fn));
         auto& list = subscribers_[std::type_index(typeid(Event))];
-        list.push_back(handler);
-        return Subscription(std::weak_ptr<void>(std::static_pointer_cast<void>(handler)));
+        list.push_back(std::weak_ptr<void>(std::static_pointer_cast<void>(handler)));
+        return Subscription(std::static_pointer_cast<void>(handler));
     }
 
     template <typename Event>

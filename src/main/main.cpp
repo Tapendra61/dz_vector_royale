@@ -12,6 +12,7 @@
 #include "core/time.h"
 #include "game/data/tuning.h"
 #include "game/components/bullet.h"
+#include "game/components/emitter_state.h"
 #include "game/components/health.h"
 #include "game/components/intent.h"
 #include "game/components/inventory.h"
@@ -127,8 +128,6 @@ int main(int /*argc*/, char** /*argv*/) {
     int                 last_bullet_count = 0;
     bool                show_overlay      = true;
     float               heartbeat_timer   = 0.0f;
-    float               bullet_trail_acc  = 0.0f;
-    float               thrust_emit_acc   = 0.0f;
 
     while (!WindowShouldClose()) {
         if (IsWindowResized()) {
@@ -173,30 +172,35 @@ int main(int /*argc*/, char** /*argv*/) {
         if (now_bullets > last_bullet_count) audio.play(audio::Cue::Fire, 0.85f);
         last_bullet_count = now_bullets;
 
-        // Continuous trail behind each live bullet.
+        // Continuous trail behind each live bullet — each bullet keeps its
+        // own fractional-spawn accumulator on its EmitterStateComponent.
         if (auto* trail = specs.find("bullet_trail")) {
-            reg.view<game::BulletComponent, game::TransformComponent, game::VelocityComponent>().each(
-                [&](const game::BulletComponent&, const game::TransformComponent& tr, const game::VelocityComponent& v) {
+            reg.view<game::BulletComponent, game::TransformComponent, game::VelocityComponent,
+                     game::EmitterStateComponent>().each(
+                [&](const game::BulletComponent&, const game::TransformComponent& tr,
+                    const game::VelocityComponent& v, game::EmitterStateComponent& es) {
                     Vector2 dir{-v.linear.x, -v.linear.y};
-                    particles.continuous(*trail, tr.position, dir, static_cast<float>(step.frame_dt), bullet_trail_acc);
+                    particles.continuous(*trail, tr.position, dir,
+                                         static_cast<float>(step.frame_dt), es.trail_acc);
                 });
         }
 
         // Thrust exhaust behind every ship that's actually thrusting.
         if (auto* exhaust = specs.find("thrust_exhaust")) {
-            reg.view<game::ShipComponent, game::IntentComponent, game::TransformComponent>().each(
-                [&](const game::ShipComponent&, const game::IntentComponent& ic, const game::TransformComponent& tr) {
+            reg.view<game::ShipComponent, game::IntentComponent, game::TransformComponent,
+                     game::EmitterStateComponent>().each(
+                [&](const game::ShipComponent&, const game::IntentComponent& ic,
+                    const game::TransformComponent& tr, game::EmitterStateComponent& es) {
                     if (ic.value.thrust <= 0.05f) return;
                     const float    cosr = std::cos(tr.rotation);
                     const float    sinr = std::sin(tr.rotation);
                     const Vector2 tail{tr.position.x - cosr * tuning.ship.radius,
                                         tr.position.y - sinr * tuning.ship.radius};
                     const Vector2 back{-cosr, -sinr};
-                    float local_acc = 0.0f;
                     auto spec = *exhaust;
                     spec.rate_per_second *= ic.value.thrust;
-                    particles.continuous(spec, tail, back, static_cast<float>(step.frame_dt), thrust_emit_acc);
-                    (void)local_acc;
+                    particles.continuous(spec, tail, back,
+                                         static_cast<float>(step.frame_dt), es.thrust_acc);
                 });
         }
 
@@ -226,15 +230,16 @@ int main(int /*argc*/, char** /*argv*/) {
         // Pickup events → sparkle / heal burst + chimes.
         route_pickup_audio(world.pickup_events(), audio, particles, specs, reg);
 
-        // Continuous pickup ambient sparkle.
+        // Continuous pickup ambient sparkle — per-pickup accumulator.
         if (auto* sparkle = specs.find("pickup_sparkle")) {
-            float pickup_acc = 0.0f;
-            reg.view<game::PickupComponent, game::TransformComponent>().each(
-                [&](const game::PickupComponent&, const game::TransformComponent& tr) {
+            reg.view<game::PickupComponent, game::TransformComponent,
+                     game::EmitterStateComponent>().each(
+                [&](const game::PickupComponent&, const game::TransformComponent& tr,
+                    game::EmitterStateComponent& es) {
                     auto spec = *sparkle;
                     spec.rate_per_second *= 0.4f;
                     particles.continuous(spec, tr.position, {0.0f, -1.0f},
-                                         static_cast<float>(step.frame_dt), pickup_acc);
+                                         static_cast<float>(step.frame_dt), es.sparkle_acc);
                 });
         }
 

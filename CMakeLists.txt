@@ -40,6 +40,11 @@ if(VECTOR_BUILD_TOOLS)
     add_subdirectory(tools)
 endif()
 
+if(VECTOR_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
 message(STATUS "")
 message(STATUS "VECTOR configured:")
 message(STATUS "  build type    : ${CMAKE_BUILD_TYPE}")
