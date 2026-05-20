@@ -1,4 +1,5 @@
-// VECTOR — Phase 1 entry point.
+// VECTOR — Phase 2 entry point. Adds AI bots through the unified
+// IntentComponent pipeline (roadmap §6.1).
 //   * Window + fixed-timestep loop from Phase 0
 //   * World owns the ECS + systems
 //   * KeyboardMouseInput produces InputIntent each frame (gamepad if plugged)
@@ -13,6 +14,7 @@
 #include "core/time.h"
 #include "game/data/tuning.h"
 #include "game/components/health.h"
+#include "game/components/intent.h"
 #include "game/components/inventory.h"
 #include "game/components/transform.h"
 #include "game/components/physics.h"
@@ -64,7 +66,7 @@ int main(int /*argc*/, char** /*argv*/) {
     using namespace vector;
 
     core::init_logging("vector");
-    VECTOR_INFO("VECTOR Phase 1 — boot");
+    VECTOR_INFO("VECTOR Phase 2 — boot");
 
     auto platform = platform::create_platform();
     platform->mountAssets();
@@ -73,7 +75,7 @@ int main(int /*argc*/, char** /*argv*/) {
     const auto tuning = game::Tuning::load(platform->resolveAsset("data/tuning.json"));
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
-    InitWindow(kInitialWidth, kInitialHeight, "VECTOR — Phase 1");
+    InitWindow(kInitialWidth, kInitialHeight, "VECTOR — Phase 2");
     SetExitKey(KEY_NULL);
     SetTargetFPS(0);
 
@@ -116,16 +118,22 @@ int main(int /*argc*/, char** /*argv*/) {
         }
 
         // Poll input: prefer gamepad if connected, otherwise KB/M.
-        game::InputIntent intent = gpad.isAvailable()
+        const game::InputIntent intent = gpad.isAvailable()
             ? gpad.poll(player_pos, camera.raw())
             : kbm.poll(player_pos, camera.raw());
+
+        // Write the player's intent into its IntentComponent so the
+        // Movement/Weapon/Pickup systems treat the human exactly like a bot.
+        if (auto& mut_reg = world.registry(); mut_reg.valid(player)) {
+            mut_reg.get<game::IntentComponent>(player).value = intent;
+        }
 
         if (IsKeyPressed(KEY_F1)) show_overlay = !show_overlay;
 
         // Fixed-timestep sim — N catch-up ticks per frame.
         const auto step = clock.step();
         for (int i = 0; i < step.sim_ticks; ++i) {
-            world.tick(intent, static_cast<float>(core::kSimDt));
+            world.tick(static_cast<float>(core::kSimDt));
         }
 
         // Audio: fire each time a bullet was actually born this frame.
@@ -183,6 +191,7 @@ int main(int /*argc*/, char** /*argv*/) {
             ImGui::Text("ticks/frame: %d", step.sim_ticks);
             ImGui::Text("alpha      : %.3f", step.alpha);
             ImGui::Text("bullets    : %d", world.bullet_count());
+            ImGui::Text("bots       : %d", world.bot_count());
             ImGui::Separator();
             if (reg.valid(player)) {
                 const auto& hp  = reg.get<game::HealthComponent>(player);

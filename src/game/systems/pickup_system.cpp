@@ -1,6 +1,7 @@
 #include "game/systems/pickup_system.h"
 
 #include "game/components/health.h"
+#include "game/components/intent.h"
 #include "game/components/inventory.h"
 #include "game/components/physics.h"
 #include "game/components/pickup.h"
@@ -30,23 +31,16 @@ float jitter(float base, float spread) {
 
 }  // namespace
 
-void PickupSystem::tick(ecs::Registry& reg,
-                       ecs::Entity player_ship,
-                       const InputIntent& intent,
-                       const PickupTuning& tune,
-                       float dt) {
+void PickupSystem::tick(ecs::Registry& reg, const PickupTuning& tune, float dt) {
     events_.clear();
 
-    // --- 1) Spawn director: each spawn point counts down independently. ---
-    // We *create* pickup entities only when the spawn-point's timer hits 0
-    // and there isn't already a live pickup at that point.
+    // --- 1) Spawn director. ---
     reg.view<PickupSpawnPoint, TransformComponent>().each(
         [&](PickupSpawnPoint& sp, TransformComponent& sp_tr) {
             if (sp.next_spawn_in > 0.0f) {
                 sp.next_spawn_in -= dt;
                 return;
             }
-
             auto pickup = reg.create();
             reg.emplace<TransformComponent>(pickup, TransformComponent{sp_tr.position, 0.0f});
             reg.emplace<PrevTransformComponent>(pickup);
@@ -57,12 +51,11 @@ void PickupSystem::tick(ecs::Registry& reg,
             reg.emplace<RenderComponent>(pickup, RenderComponent{
                 Shape::Pickup, Color{120, 220, 140, 255}, tune.radius
             });
-
             sp.next_spawn_in = jitter(sp.cooldown, sp.jitter);
             events_.push_back({Event::Spawned, ecs::null_entity});
         });
 
-    // --- 2) Despawn expired pickups + animate the bob phase. ---
+    // --- 2) Despawn timeouts + bob animation. ---
     {
         std::vector<ecs::Entity> doomed;
         reg.view<PickupComponent>().each([&](ecs::Entity e, PickupComponent& p) {
@@ -76,15 +69,17 @@ void PickupSystem::tick(ecs::Registry& reg,
         }
     }
 
-    // --- 3) Acquisition: ship overlaps a pickup → into inventory. ---
-    if (reg.valid(player_ship)) {
-        auto& ship_tr = reg.get<TransformComponent>(player_ship);
-        auto& ship_co = reg.get<ColliderComponent>(player_ship);
-        auto& inv     = reg.get<InventoryComponent>(player_ship);
+    // --- 3) Acquisition: every ship with an inventory checks pickup overlap. ---
+    auto ship_view = reg.view<TransformComponent, ColliderComponent, InventoryComponent>();
+    std::vector<ecs::Entity> acquired;
+    for (auto ship : ship_view) {
+        auto& inv     = ship_view.get<InventoryComponent>(ship);
+        auto& ship_tr = ship_view.get<TransformComponent>(ship);
+        auto& ship_co = ship_view.get<ColliderComponent>(ship);
 
-        std::vector<ecs::Entity> acquired;
         reg.view<PickupComponent, TransformComponent, ColliderComponent>().each(
             [&](ecs::Entity e, const PickupComponent& p, const TransformComponent& tr, const ColliderComponent& col) {
+                if (std::find(acquired.begin(), acquired.end(), e) != acquired.end()) return;
                 const float dx = tr.position.x - ship_tr.position.x;
                 const float dy = tr.position.y - ship_tr.position.y;
                 const float r  = col.radius + ship_co.radius;
@@ -95,41 +90,37 @@ void PickupSystem::tick(ecs::Registry& reg,
                     inv.primary        = p.type;
                     inv.primary_charge = 1.0f;
                     acquired.push_back(e);
+                    events_.push_back({Event::Acquired, ship});
                 } else if (slot == PowerUpSlot::Special && inv.special == PowerUpType::None) {
                     inv.special        = p.type;
                     inv.special_charge = 1.0f;
                     acquired.push_back(e);
+                    events_.push_back({Event::Acquired, ship});
                 }
             });
-        for (auto e : acquired) {
-            reg.destroy(e);
-            events_.push_back({Event::Acquired, player_ship});
-        }
+    }
+    for (auto e : acquired) if (reg.valid(e)) reg.destroy(e);
 
-        // --- 4) Activation. Phase 1 supports RepairPack only. ---
-        auto activate_special = [&]() {
-            switch (inv.special) {
-                case PowerUpType::RepairPack: {
-                    auto& hp = reg.get<HealthComponent>(player_ship);
-                    hp.current = std::min(hp.max, hp.current + tune.repair_amount);
-                    inv.special        = PowerUpType::None;
-                    inv.special_charge = 0.0f;
-                    events_.push_back({Event::Activated, player_ship});
-                    return true;
-                }
-                default:
-                    events_.push_back({Event::ActivationDenied, player_ship});
-                    return false;
+    // --- 4) Activation. Per-ship; Phase 1/2 supports RepairPack only. ---
+    auto act_view = reg.view<InventoryComponent, IntentComponent, HealthComponent>();
+    for (auto ship : act_view) {
+        auto& inv    = act_view.get<InventoryComponent>(ship);
+        auto& intent = act_view.get<IntentComponent>(ship).value;
+        auto& hp     = act_view.get<HealthComponent>(ship);
+
+        if (intent.use_special && inv.special != PowerUpType::None) {
+            if (inv.special == PowerUpType::RepairPack) {
+                hp.current = std::min(hp.max, hp.current + tune.repair_amount);
+                inv.special        = PowerUpType::None;
+                inv.special_charge = 0.0f;
+                events_.push_back({Event::Activated, ship});
+            } else {
+                events_.push_back({Event::ActivationDenied, ship});
             }
-        };
-        auto activate_primary = [&]() {
-            // No Phase 1 primaries shipped yet; reject so the SFX cue can play.
-            events_.push_back({Event::ActivationDenied, player_ship});
-            return false;
-        };
-
-        if (intent.use_special && inv.special != PowerUpType::None) activate_special();
-        if (intent.use_primary && inv.primary != PowerUpType::None) activate_primary();
+        }
+        if (intent.use_primary && inv.primary != PowerUpType::None) {
+            events_.push_back({Event::ActivationDenied, ship});
+        }
     }
 }
 

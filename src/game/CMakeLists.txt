@@ -3,6 +3,9 @@ add_library(vector_game STATIC
     data/tuning.cpp
     input/keyboard_mouse_input.cpp
     input/gamepad_input.cpp
+    ai/steering.cpp
+    ai/behavior_tree.cpp
+    ai/bot_brain.cpp
     systems/movement_system.cpp
     systems/physics_system.cpp
     systems/lifetime_system.cpp
@@ -11,6 +14,7 @@ add_library(vector_game STATIC
     systems/collision_system.cpp
     systems/health_system.cpp
     systems/pickup_system.cpp
+    systems/ai_system.cpp
     world.cpp
 )
 

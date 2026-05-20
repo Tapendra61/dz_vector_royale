@@ -1,21 +1,16 @@
 #pragma once
 
 #include "ecs/registry.h"
-#include "game/input/input_intent.h"
 
 namespace vector::game {
 
-struct ShipTuning;
-
-// Translates a per-tick InputIntent into angular + linear acceleration on
-// the player-controlled ship. Runs *before* PhysicsSystem each tick.
+// Reads every Ship+Intent pair and converts the per-tick InputIntent into
+// angular + linear acceleration. Runs *before* PhysicsSystem each tick.
+// AI and human-controlled ships are indistinguishable from this system's
+// POV — they both have an `IntentComponent` filled by their controller.
 class MovementSystem {
 public:
-    void apply_player_intent(ecs::Registry& reg,
-                             ecs::Entity ship,
-                             const InputIntent& intent,
-                             const ShipTuning& tuning,
-                             float dt);
+    void tick(ecs::Registry& reg, float dt);
 };
 
 }  // namespace vector::game
