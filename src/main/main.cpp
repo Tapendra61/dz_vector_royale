@@ -53,33 +53,29 @@ namespace {
 constexpr int kInitialWidth  = 1280;
 constexpr int kInitialHeight = 720;
 
-void route_pickup_audio(const std::vector<vector::game::PickupSystem::Event>& events,
-                        vector::audio::AudioSystem& audio,
-                        vector::render::ParticleSystem& particles,
-                        const vector::render::EmitterLibrary& specs,
-                        vector::ecs::Registry& reg) {
-    using K = vector::game::PickupSystem::Event::Kind;
-    for (const auto& e : events) {
-        switch (e.kind) {
-            case K::Acquired:
-                audio.play(vector::audio::Cue::PickupAcquired);
-                if (reg.valid(e.ship)) {
-                    const auto& tr = reg.get<vector::game::TransformComponent>(e.ship);
-                    if (auto* s = specs.find("pickup_sparkle"))
-                        particles.burst(*s, tr.position, {0.0f, -1.0f});
-                }
-                break;
-            case K::Activated:
-                audio.play(vector::audio::Cue::PowerUpActivated);
-                if (reg.valid(e.ship)) {
-                    const auto& tr = reg.get<vector::game::TransformComponent>(e.ship);
-                    if (auto* s = specs.find("heal_burst"))
-                        particles.burst(*s, tr.position, {0.0f, -1.0f});
-                }
-                break;
-            default: break;
-        }
-    }
+// Spatial-audio params per cue (roadmap §7.3): events farther than
+// `hear_range` go silent; volume falls off quadratically with distance,
+// peaking at `base_volume` when the source is on top of the listener.
+struct SpatialAudio {
+    float hear_range;
+    float base_volume;
+};
+
+// Quadratic falloff for natural-sounding rolloff. Returns 0 outside range
+// (caller can early-out before invoking PlaySound).
+float spatial_gain(Vector2 source, Vector2 listener, SpatialAudio p) {
+    const float dx = source.x - listener.x;
+    const float dy = source.y - listener.y;
+    const float d  = std::sqrt(dx * dx + dy * dy);
+    if (d >= p.hear_range) return 0.0f;
+    const float t = 1.0f - d / p.hear_range;
+    return p.base_volume * t * t;
+}
+
+void play_spatial(vector::audio::AudioSystem& audio, vector::audio::Cue cue,
+                  Vector2 source, Vector2 listener, SpatialAudio p) {
+    const float gain = spatial_gain(source, listener, p);
+    if (gain > 0.0f) audio.play(cue, gain);
 }
 
 }  // namespace
@@ -168,28 +164,34 @@ int main(int /*argc*/, char** /*argv*/) {
 
         // --- Fx routing: convert this frame's gameplay events to VFX/SFX. ---
 
-        // Fire SFX: spatially attenuated by distance from the player so a
-        // dozen bots shooting on the far side of the arena isn't a wall of
-        // noise. Cap simultaneous voices per frame to keep the mix clean.
-        {
-            constexpr float kHearRange         = 900.0f;   // world units
-            constexpr int   kMaxFiresPerFrame  = 3;
+        // All spatial cues share the same falloff shape (quadratic). The
+        // hear_range varies by event size — explosions carry farther than
+        // small chimes (roadmap §7.3).
+        constexpr SpatialAudio kFireSpat     {900.0f,  0.85f};
+        constexpr SpatialAudio kHitSpat      {700.0f,  0.50f};
+        constexpr SpatialAudio kBoomSpat    {1400.0f,  0.85f};
+        constexpr SpatialAudio kAcquireSpat  {500.0f,  1.00f};
+        constexpr SpatialAudio kActivateSpat {600.0f,  1.00f};
 
-            std::vector<float> distances;
-            distances.reserve(world.fires().size());
+        // Fire — same spatial rules, but also rate-limit per frame since
+        // many bullets can spawn on the same sim tick.
+        {
+            constexpr int kMaxFiresPerFrame = 3;
+            std::vector<std::pair<float, Vector2>> by_dist;
+            by_dist.reserve(world.fires().size());
             for (const auto& f : world.fires()) {
                 const float dx = f.position.x - player_pos.x;
                 const float dy = f.position.y - player_pos.y;
-                distances.push_back(std::sqrt(dx * dx + dy * dy));
+                by_dist.emplace_back(std::sqrt(dx * dx + dy * dy), f.position);
             }
-            std::sort(distances.begin(), distances.end());
+            std::sort(by_dist.begin(), by_dist.end(),
+                      [](const auto& a, const auto& b) { return a.first < b.first; });
 
             int played = 0;
-            for (float d : distances) {
+            for (const auto& [d, pos] : by_dist) {
                 if (played >= kMaxFiresPerFrame) break;
-                if (d >= kHearRange) continue;
-                const float t = 1.0f - d / kHearRange;
-                audio.play(audio::Cue::Fire, 0.85f * t * t);
+                if (d >= kFireSpat.hear_range)  continue;
+                play_spatial(audio, audio::Cue::Fire, pos, player_pos, kFireSpat);
                 ++played;
             }
         }
@@ -226,31 +228,67 @@ int main(int /*argc*/, char** /*argv*/) {
                 });
         }
 
-        // Hits → spark + screen shake.
-        for (const auto& h : world.hits()) {
-            if (auto* s = specs.find("hit_spark")) {
-                Vector2 outward{-h.incoming_dir.x, -h.incoming_dir.y};
-                if (outward.x == 0.0f && outward.y == 0.0f) outward = {0.0f, -1.0f};
-                particles.burst(*s, h.position, outward);
+        // Hits → spark + screen shake + distance-attenuated SFX (capped).
+        {
+            constexpr int kMaxHitsPerFrame = 3;
+            std::vector<std::pair<float, Vector2>> by_dist;
+            by_dist.reserve(world.hits().size());
+            for (const auto& h : world.hits()) {
+                if (auto* s = specs.find("hit_spark")) {
+                    Vector2 outward{-h.incoming_dir.x, -h.incoming_dir.y};
+                    if (outward.x == 0.0f && outward.y == 0.0f) outward = {0.0f, -1.0f};
+                    particles.burst(*s, h.position, outward);
+                }
+                if (h.target == player) camera.add_trauma(0.45f);
+                else                    camera.add_trauma(0.12f);
+
+                const float dx = h.position.x - player_pos.x;
+                const float dy = h.position.y - player_pos.y;
+                by_dist.emplace_back(std::sqrt(dx * dx + dy * dy), h.position);
             }
-            audio.play(audio::Cue::Hit, 0.5f);
-            if (h.target == player) camera.add_trauma(0.45f);
-            else                    camera.add_trauma(0.12f);
+            std::sort(by_dist.begin(), by_dist.end(),
+                      [](const auto& a, const auto& b) { return a.first < b.first; });
+            int played = 0;
+            for (const auto& [d, pos] : by_dist) {
+                if (played >= kMaxHitsPerFrame) break;
+                if (d >= kHitSpat.hear_range)   continue;
+                play_spatial(audio, audio::Cue::Hit, pos, player_pos, kHitSpat);
+                ++played;
+            }
         }
 
-        // Deaths → explosion + large shake.
+        // Deaths → explosion + large shake (always audible at long range).
         for (const auto& d : world.deaths()) {
             if (!reg.valid(d.entity)) continue;
             const auto& tr = reg.get<game::TransformComponent>(d.entity);
             if (auto* s = specs.find("ship_explosion")) {
                 particles.burst(*s, tr.position, {0.0f, -1.0f});
             }
-            audio.play(audio::Cue::Explosion, 0.85f);
+            play_spatial(audio, audio::Cue::Explosion, tr.position, player_pos, kBoomSpat);
             camera.add_trauma(d.entity == player ? 0.9f : 0.35f);
         }
 
-        // Pickup events → sparkle / heal burst + chimes.
-        route_pickup_audio(world.pickup_events(), audio, particles, specs, reg);
+        // Pickup events → sparkle / heal burst + distance-attenuated chime.
+        for (const auto& ev : world.pickup_events()) {
+            using K = game::PickupSystem::Event::Kind;
+            if (!reg.valid(ev.ship)) continue;
+            const auto& tr = reg.get<game::TransformComponent>(ev.ship);
+            switch (ev.kind) {
+                case K::Acquired:
+                    if (auto* s = specs.find("pickup_sparkle"))
+                        particles.burst(*s, tr.position, {0.0f, -1.0f});
+                    play_spatial(audio, audio::Cue::PickupAcquired,
+                                 tr.position, player_pos, kAcquireSpat);
+                    break;
+                case K::Activated:
+                    if (auto* s = specs.find("heal_burst"))
+                        particles.burst(*s, tr.position, {0.0f, -1.0f});
+                    play_spatial(audio, audio::Cue::PowerUpActivated,
+                                 tr.position, player_pos, kActivateSpat);
+                    break;
+                default: break;
+            }
+        }
 
         // Continuous pickup ambient sparkle — per-pickup accumulator.
         if (auto* sparkle = specs.find("pickup_sparkle")) {
