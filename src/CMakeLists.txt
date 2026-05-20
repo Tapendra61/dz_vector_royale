@@ -1,3 +1,7 @@
 add_subdirectory(core)
+add_subdirectory(ecs)
 add_subdirectory(platform)
+add_subdirectory(game)
+add_subdirectory(render)
+add_subdirectory(audio)
 add_subdirectory(main)

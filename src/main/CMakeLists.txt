@@ -4,6 +4,10 @@ target_link_libraries(vector
     PRIVATE
         vector::core
         vector::platform
+        vector::ecs
+        vector::game
+        vector::render
+        vector::audio
         raylib
 )
 

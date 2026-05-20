@@ -1,0 +1,22 @@
+{
+    "// Note": "Power-up definitions per roadmap §17.5. Phase 1 only ships RepairPack end-to-end; the rest are placeholders used by Phase 4 onward.",
+    "repair_pack": {
+        "slot":               "special",
+        "amount":             40.0,
+        "activation":         "instant",
+        "spawn_weight":       22,
+        "vfx":                "heal_burst",
+        "sfx":                "pickup_warm"
+    },
+    "shield":      { "slot": "special", "duration": 8.0,  "absorb": 75.0, "spawn_weight": 18 },
+    "speed_boost": { "slot": "special", "duration": 5.0,  "thrust_mult": 1.5, "spawn_weight": 16 },
+    "scatter":    { "slot": "primary", "duration": 6.0,  "spawn_weight": 12 },
+    "mine":       { "slot": "primary", "max_active": 3,  "arming": 1.0, "spawn_weight": 10 },
+    "ice_blast":  { "slot": "primary", "freeze": 1.5,    "spawn_weight": 10 },
+    "cloak":      { "slot": "special", "duration": 4.0,  "spawn_weight":  8 },
+    "missile":    { "slot": "primary", "spawn_weight":   6 },
+    "emp":        { "slot": "special", "stun": 0.8, "disable": 3.0, "spawn_weight": 5 },
+    "teleport":   { "slot": "special", "spawn_weight":   4 },
+    "laser":      { "slot": "primary", "charge": 0.5, "beam": 1.5, "spawn_weight": 3 },
+    "railgun":    { "slot": "primary", "self_damage": 5.0, "spawn_weight": 1 }
+}

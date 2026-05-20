@@ -1,0 +1,38 @@
+{
+    "// Note": "Phase 1 tuning. Roadmap §3.3 — all gameplay constants live here. Edit and re-launch (no recompile).",
+    "ship": {
+        "thrust_accel":     320.0,
+        "angular_accel":      6.0,
+        "linear_damping":     0.30,
+        "angular_damping":    4.0,
+        "max_speed":        350.0,
+        "radius":            12.0,
+        "hp_max":           100.0,
+        "hp_regen_rate":      8.0,
+        "hp_regen_delay":     3.0,
+        "boost_multiplier":   1.8,
+        "boost_duration":     0.5,
+        "boost_cooldown":     3.0,
+        "spawn_protect_s":    1.5
+    },
+    "weapon": {
+        "fire_rate":         6.0,
+        "bullet_speed":    800.0,
+        "bullet_lifetime":   1.2,
+        "bullet_damage":     8.0,
+        "bullet_radius":     3.0
+    },
+    "arena": {
+        "width":          2400.0,
+        "height":         1600.0,
+        "wall_bounce":       0.4,
+        "wall_damage":       0.0
+    },
+    "pickup": {
+        "repair_amount":    40.0,
+        "spawn_cooldown":   12.0,
+        "spawn_jitter":      2.0,
+        "despawn_timeout":  30.0,
+        "radius":           16.0
+    }
+}

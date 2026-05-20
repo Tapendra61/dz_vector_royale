@@ -1,14 +1,29 @@
-// VECTOR — Phase 0 entry point.
-// Opens a window, runs a fixed-timestep simulation loop decoupled from
-// rendering, and shows a debug overlay. No gameplay yet — just the skeleton
-// every later phase will hang off of (roadmap §4).
+// VECTOR — Phase 1 entry point.
+//   * Window + fixed-timestep loop from Phase 0
+//   * World owns the ECS + systems
+//   * KeyboardMouseInput produces InputIntent each frame (gamepad if plugged)
+//   * Renderer interpolates between sim ticks via alpha
+//   * AudioSystem reacts to PickupSystem events
 
+#include "audio/audio_system.h"
 #include "core/config.h"
 #include "core/event_bus.h"
 #include "core/logging.h"
 #include "core/service_locator.h"
 #include "core/time.h"
+#include "game/data/tuning.h"
+#include "game/components/health.h"
+#include "game/components/inventory.h"
+#include "game/components/transform.h"
+#include "game/components/physics.h"
+#include "game/input/gamepad_input.h"
+#include "game/input/keyboard_mouse_input.h"
+#include "game/systems/pickup_system.h"
+#include "game/world.h"
 #include "platform/iplatform.h"
+#include "render/camera.h"
+#include "render/hud.h"
+#include "render/sprite_renderer.h"
 
 #include <raylib.h>
 
@@ -19,24 +34,28 @@
 
 #include <cmath>
 #include <cstdio>
+#include <memory>
 
 namespace {
 
 constexpr int kInitialWidth  = 1280;
 constexpr int kInitialHeight = 720;
 
-struct SimState {
-    double t        = 0.0;
-    float  hue_deg  = 0.0f;  // placeholder: rotates the background tint each tick
-};
-
-void simulate(SimState& s) {
-    s.t       += vector::core::kSimDt;
-    s.hue_deg  = std::fmod(s.hue_deg + 30.0f * static_cast<float>(vector::core::kSimDt), 360.0f);
+void handle_window_resize(vector::render::FollowCamera& cam) {
+    if (IsWindowResized()) cam.onWindowResize(GetScreenWidth(), GetScreenHeight());
 }
 
-Color tint_from_hue(float hue_deg) {
-    return ColorFromHSV(hue_deg, 0.15f, 0.10f);
+void route_pickup_audio(const std::vector<vector::game::PickupSystem::Event>& events,
+                        vector::audio::AudioSystem& audio) {
+    using K = vector::game::PickupSystem::Event::Kind;
+    for (const auto& e : events) {
+        switch (e.kind) {
+            case K::Acquired:           audio.play(vector::audio::Cue::PickupAcquired);  break;
+            case K::Activated:          audio.play(vector::audio::Cue::PowerUpActivated); break;
+            case K::ActivationDenied:   /* no-op (no rejection sfx authored yet) */      break;
+            default: break;
+        }
+    }
 }
 
 }  // namespace
@@ -45,75 +64,140 @@ int main(int /*argc*/, char** /*argv*/) {
     using namespace vector;
 
     core::init_logging("vector");
-    VECTOR_INFO("VECTOR Phase 0 — boot");
+    VECTOR_INFO("VECTOR Phase 1 — boot");
 
     auto platform = platform::create_platform();
     platform->mountAssets();
-    VECTOR_INFO("platform: {}", platform->name());
 
-    if (auto cfg = core::Config::load_from_file(platform->resolveAsset("config.json"))) {
-        VECTOR_INFO("config: loaded {} keys", cfg->raw().size());
-    }
-
-    core::ServiceLocator services;
-    core::EventBus       events;
-    services.provide(&events);
-    services.provide(platform.get());
+    // Tuning data lives in assets/data/tuning.json; defaults if missing.
+    const auto tuning = game::Tuning::load(platform->resolveAsset("data/tuning.json"));
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
-    InitWindow(kInitialWidth, kInitialHeight, "VECTOR — Hello");
+    InitWindow(kInitialWidth, kInitialHeight, "VECTOR — Phase 1");
     SetExitKey(KEY_NULL);
-    SetTargetFPS(0);  // we drive timing ourselves
+    SetTargetFPS(0);
 
 #if VECTOR_ENABLE_IMGUI
     rlImGuiSetup(true);
 #endif
 
-    core::FixedTimestep clock;
-    SimState            sim;
+    audio::AudioSystem    audio;
+    game::World           world(tuning);
+    render::FollowCamera  camera;
+    render::SpriteRenderer sprites;
+    render::HUD           hud;
 
-    bool show_overlay = true;
+    camera.onWindowResize(GetScreenWidth(), GetScreenHeight());
+
+    game::KeyboardMouseInput  kbm;
+    game::GamepadInput        gpad;
+
+    core::FixedTimestep clock;
+    int                 last_bullet_count = 0;
+    bool                show_overlay      = true;
+    int                 last_inv_special  = 0;
+    bool                last_low_hp_state = false;
+    float               heartbeat_timer   = 0.0f;
+
+    bool fire_held_last_tick = false;
 
     while (!WindowShouldClose()) {
-        const auto step = clock.step();
-        for (int i = 0; i < step.sim_ticks; ++i) simulate(sim);
+        handle_window_resize(camera);
+
+        const auto& reg = world.registry();
+        const auto player = world.player();
+        Vector2 player_pos{0, 0};
+        Vector2 player_vel{0, 0};
+        if (reg.valid(player)) {
+            const auto& tr  = reg.get<game::TransformComponent>(player);
+            const auto& v   = reg.get<game::VelocityComponent>(player);
+            player_pos = tr.position;
+            player_vel = v.linear;
+        }
+
+        // Poll input: prefer gamepad if connected, otherwise KB/M.
+        game::InputIntent intent = gpad.isAvailable()
+            ? gpad.poll(player_pos, camera.raw())
+            : kbm.poll(player_pos, camera.raw());
 
         if (IsKeyPressed(KEY_F1)) show_overlay = !show_overlay;
 
+        // Fixed-timestep sim — N catch-up ticks per frame.
+        const auto step = clock.step();
+        for (int i = 0; i < step.sim_ticks; ++i) {
+            world.tick(intent, static_cast<float>(core::kSimDt));
+        }
+
+        // Audio: fire each time a bullet was actually born this frame.
+        const int now_bullets = world.bullet_count();
+        if (now_bullets > last_bullet_count) audio.play(audio::Cue::Fire, 0.5f);
+        last_bullet_count = now_bullets;
+        (void)fire_held_last_tick;
+
+        // Audio: pickup events from this batch of sim ticks.
+        route_pickup_audio(world.pickup_events(), audio);
+
+        // Audio: low-HP heartbeat tick.
+        bool low_hp = false;
+        if (reg.valid(player)) {
+            const auto& hp = reg.get<game::HealthComponent>(player);
+            low_hp = hp.fraction() > 0.0f && hp.fraction() < 0.25f;
+        }
+        if (low_hp) {
+            heartbeat_timer -= static_cast<float>(step.frame_dt);
+            if (heartbeat_timer <= 0.0f) {
+                audio.play(audio::Cue::LowHpHeartbeat, 0.7f);
+                heartbeat_timer = 0.55f;
+            }
+        } else {
+            heartbeat_timer = 0.0f;
+        }
+        last_low_hp_state = low_hp;
+        (void)last_inv_special;
+
+        // Render.
+        camera.update(player_pos, player_vel, static_cast<float>(step.frame_dt));
+
         BeginDrawing();
-        ClearBackground(tint_from_hue(sim.hue_deg));
+        ClearBackground(Color{14, 18, 28, 255});
 
-        const int   w   = GetScreenWidth();
-        const int   h   = GetScreenHeight();
-        const char* msg = "Hello, VECTOR";
-        const int   fs  = 48;
-        const int   tw  = MeasureText(msg, fs);
-        DrawText(msg, (w - tw) / 2, (h - fs) / 2, fs, RAYWHITE);
+        BeginMode2D(camera.raw());
+        sprites.drawArena(world.arena());
+        sprites.drawEntities(const_cast<ecs::Registry&>(reg),
+                             static_cast<float>(step.alpha));
+        EndMode2D();
 
-        const char* sub = "Phase 0 — fixed-timestep loop running. F1 toggles overlay.";
-        DrawText(sub, (w - MeasureText(sub, 18)) / 2, (h / 2) + fs, 18, GRAY);
+        hud.drawScreen(world, GetScreenWidth(), GetScreenHeight());
 
 #if VECTOR_ENABLE_IMGUI
         rlImGuiBegin();
         if (show_overlay) {
             ImGui::SetNextWindowPos(ImVec2(12, 12), ImGuiCond_FirstUseEver);
-            ImGui::SetNextWindowSize(ImVec2(280, 180), ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSize(ImVec2(300, 240), ImGuiCond_FirstUseEver);
             ImGui::Begin("VECTOR debug", &show_overlay);
             ImGui::Text("platform   : %s", platform->name().c_str());
             ImGui::Text("render FPS : %d", GetFPS());
             ImGui::Text("frame dt   : %.2f ms", step.frame_dt * 1000.0);
-            ImGui::Text("sim ticks  : %llu",
+            ImGui::Text("sim tick   : %llu",
                         static_cast<unsigned long long>(clock.tick()));
             ImGui::Text("ticks/frame: %d", step.sim_ticks);
             ImGui::Text("alpha      : %.3f", step.alpha);
-            ImGui::Text("sim time   : %.2f s", sim.t);
+            ImGui::Text("bullets    : %d", world.bullet_count());
             ImGui::Separator();
-            ImGui::TextDisabled("F1: toggle  |  ESC: quit");
+            if (reg.valid(player)) {
+                const auto& hp  = reg.get<game::HealthComponent>(player);
+                const auto& inv = reg.get<game::InventoryComponent>(player);
+                ImGui::Text("HP   : %.0f / %.0f", hp.current, hp.max);
+                ImGui::Text("regen: %s", hp.is_in_combat() ? "no (in combat)" : "yes");
+                ImGui::Text("Q    : %s", game::name_of(inv.primary));
+                ImGui::Text("E    : %s", game::name_of(inv.special));
+            }
+            ImGui::Separator();
+            ImGui::TextDisabled("WASD/arrows steer  |  Mouse aim  |  LMB fire");
+            ImGui::TextDisabled("E activate special  |  Shift boost  |  F1 hide");
             ImGui::End();
         }
         rlImGuiEnd();
-#else
-        DrawFPS(12, 12);
 #endif
 
         EndDrawing();
