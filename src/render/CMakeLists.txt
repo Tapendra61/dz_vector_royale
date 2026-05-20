@@ -3,6 +3,7 @@ add_library(vector_render STATIC
     sprite_renderer.cpp
     hud.cpp
     post_fx.cpp
+    flame_renderer.cpp
     particles/emitter_spec.cpp
     particles/particle_system.cpp
 )
