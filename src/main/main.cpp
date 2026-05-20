@@ -27,7 +27,6 @@
 #include "game/world.h"
 #include "platform/iplatform.h"
 #include "render/camera.h"
-#include "render/flame_renderer.h"
 #include "render/graphics_settings.h"
 #include "render/hud.h"
 #include "render/particles/emitter_spec.h"
@@ -117,9 +116,6 @@ int main(int /*argc*/, char** /*argv*/) {
     render::PostFX postfx;
     postfx.init(GetScreenWidth(), GetScreenHeight(),
                 platform->resolveAsset("shaders"));
-
-    render::FlameRenderer flame;
-    flame.init(platform->resolveAsset("shaders"));
 
     camera.onWindowResize(GetScreenWidth(), GetScreenHeight());
 
@@ -213,8 +209,31 @@ int main(int /*argc*/, char** /*argv*/) {
                 });
         }
 
-        // Thrust exhaust is now a shader-rendered flame plume — see the
-        // BeginMode2D section below for the draw call.
+        // Thrust exhaust: particles drop near the ship's tail with no
+        // outward velocity, so the ship's *forward motion* leaves a trail
+        // of fading bright dots behind it — comet-style. Bloom turns the
+        // hot core into a glow.
+        if (auto* exhaust = specs.find("thrust_exhaust")) {
+            reg.view<game::ShipComponent, game::IntentComponent, game::TransformComponent,
+                     game::VelocityComponent, game::EmitterStateComponent>().each(
+                [&](const game::ShipComponent&, const game::IntentComponent& ic,
+                    const game::TransformComponent& tr, const game::VelocityComponent&,
+                    game::EmitterStateComponent& es) {
+                    if (ic.value.thrust <= 0.05f) return;
+                    const float cosr = std::cos(tr.rotation);
+                    const float sinr = std::sin(tr.rotation);
+                    const Vector2 tail{tr.position.x - cosr * tuning.ship.radius,
+                                       tr.position.y - sinr * tuning.ship.radius};
+                    // Emit direction is opposite to facing — but speed is
+                    // near zero, so particles mostly stay in place and the
+                    // ship leaves them behind as it moves forward.
+                    const Vector2 back{-cosr, -sinr};
+                    auto spec = *exhaust;
+                    spec.rate_per_second *= ic.value.thrust;
+                    particles.continuous(spec, tail, back,
+                                         static_cast<float>(step.frame_dt), es.thrust_acc);
+                });
+        }
 
         // Hits → spark + screen shake + distance-attenuated SFX (capped).
         {
@@ -328,8 +347,6 @@ int main(int /*argc*/, char** /*argv*/) {
 
         BeginMode2D(camera.raw());
         sprites.drawArena(world.arena());
-        // Flame goes under the ships so its hot core sits behind the sprite.
-        flame.draw(reg, tuning.ship.radius, static_cast<float>(GetTime()));
         particles.draw();
         sprites.drawEntities(reg, static_cast<float>(step.alpha));
         EndMode2D();

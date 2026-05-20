@@ -2,19 +2,20 @@
     "// Note": "Phase 3 particle emitters per roadmap §7.1. Color arrays are [r, g, b, a] in 0..255.",
 
     "thrust_exhaust": {
-        "rate":           80,
-        "speed_min":      40,
-        "speed_max":     180,
-        "spread":          0.28,
-        "lifetime_min":    0.18,
-        "lifetime_max":    0.38,
-        "size_start_min":  3.0,
-        "size_start_max":  5.5,
+        "// Note":  "Comet-trail tuning. Particles drop nearly in place, drift a touch, and fade. Per-particle alpha + bloom does the work; the cyan→red color shift is intentionally subtle to avoid a rainbow look.",
+        "rate":           140,
+        "speed_min":       0,
+        "speed_max":      30,
+        "spread":          0.35,
+        "lifetime_min":    0.45,
+        "lifetime_max":    0.80,
+        "size_start_min":  4.0,
+        "size_start_max":  6.5,
         "size_end_min":    0.0,
-        "size_end_max":    0.5,
-        "drag":            3.5,
-        "color_start":   [255, 170, 80, 220],
-        "color_end":     [255,  40, 20,   0]
+        "size_end_max":    0.0,
+        "drag":            1.2,
+        "color_start":   [180, 230, 255, 255],
+        "color_end":     [120,  40,  30,   0]
     },
 
     "bullet_trail": {
