@@ -15,7 +15,7 @@ struct ShipTuning {
     float linear_damping  {  0.30f};
     float angular_damping {  4.0f};
     float max_speed       {350.0f};
-    float radius          { 12.0f};
+    float radius          { 18.0f};
     float hp_max          {100.0f};
     float hp_regen_rate   {  8.0f};
     float hp_regen_delay  {  3.0f};
@@ -26,7 +26,7 @@ struct ShipTuning {
 };
 
 struct WeaponTuning {
-    float fire_rate       {  6.0f};
+    float fire_rate       {  4.5f};
     float bullet_speed    {800.0f};
     float bullet_lifetime {  1.2f};
     float bullet_damage   {  8.0f};

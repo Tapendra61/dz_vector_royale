@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <vector>
 
 namespace vector::audio {
@@ -41,6 +42,47 @@ Wave make_wave(float duration_s, FreqFn freq_hz_at, AmpFn amp_at) {
 
 float exp_decay(float t, float tau) { return std::exp(-t / tau); }
 
+// Weighty cannon thump: a brief noise transient for the click, a mid-band
+// sine sweeping from ~520 Hz down to ~90 Hz for the body, and a 60 Hz
+// sub-bass layer that carries the chest-thump. Mixed once and clipped.
+Wave make_fire_wave() {
+    constexpr float dur = 0.20f;
+    const unsigned  fc  = static_cast<unsigned>(dur * kSampleRate);
+    auto* samples = static_cast<std::int16_t*>(std::malloc(fc * sizeof(std::int16_t)));
+    float phase_main = 0.0f;
+    float phase_sub  = 0.0f;
+    for (unsigned i = 0; i < fc; ++i) {
+        const float t = static_cast<float>(i) / static_cast<float>(kSampleRate);
+
+        // Main pitch curve: exponential decay from 520 to ~90 Hz.
+        const float main_f = 90.0f + 430.0f * std::exp(-t / 0.035f);
+        const float sub_f  = 60.0f;
+
+        phase_main += kTwoPi * main_f / static_cast<float>(kSampleRate);
+        phase_sub  += kTwoPi * sub_f  / static_cast<float>(kSampleRate);
+
+        // Initial noise click — very short, gives the percussive punch.
+        const float click_env = 0.40f * std::exp(-t / 0.005f);
+        const float click     = click_env * (static_cast<float>(std::rand()) /
+                                             static_cast<float>(RAND_MAX) * 2.0f - 1.0f);
+
+        // Body — mid sweep + sub-bass, longer decay than the click.
+        const float body_env  = 0.70f * std::exp(-t / 0.09f);
+        const float body      = body_env * (std::sin(phase_main) * 0.65f
+                                          + std::sin(phase_sub)  * 0.55f);
+
+        const float v = std::clamp(click + body, -1.0f, 1.0f);
+        samples[i] = static_cast<std::int16_t>(v * 32000.0f);
+    }
+    Wave w{};
+    w.frameCount = fc;
+    w.sampleRate = kSampleRate;
+    w.sampleSize = kSampleSize;
+    w.channels   = kChannels;
+    w.data       = samples;
+    return w;
+}
+
 }  // namespace
 
 AudioSystem::AudioSystem() {
@@ -69,9 +111,7 @@ void AudioSystem::generate_all() {
         sounds_[i] = LoadSoundFromWave(w);
     };
 
-    store(Cue::Fire,             make_wave(0.08f,
-        [](float t){ return 800.0f - 1200.0f * t; },
-        [](float t){ return 0.45f  * exp_decay(t, 0.04f); }));
+    store(Cue::Fire, make_fire_wave());
 
     store(Cue::Hit,              make_wave(0.10f,
         [](float t){ return 220.0f + 80.0f  * std::sin(t * 70.0f); },

@@ -138,7 +138,7 @@ int main(int /*argc*/, char** /*argv*/) {
 
         // Audio: fire each time a bullet was actually born this frame.
         const int now_bullets = world.bullet_count();
-        if (now_bullets > last_bullet_count) audio.play(audio::Cue::Fire, 0.5f);
+        if (now_bullets > last_bullet_count) audio.play(audio::Cue::Fire, 0.85f);
         last_bullet_count = now_bullets;
         (void)fire_held_last_tick;
 
