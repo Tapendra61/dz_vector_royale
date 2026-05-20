@@ -1,0 +1,81 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": { "major": 3, "minor": 24, "patch": 0 },
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            }
+        },
+        {
+            "name": "desktop-debug",
+            "displayName": "Desktop Debug",
+            "inherits": "base",
+            "generator": "Ninja",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+        },
+        {
+            "name": "desktop-relwithdebinfo",
+            "displayName": "Desktop RelWithDebInfo",
+            "inherits": "base",
+            "generator": "Ninja",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
+        },
+        {
+            "name": "desktop-release",
+            "displayName": "Desktop Release",
+            "inherits": "base",
+            "generator": "Ninja",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+        },
+        {
+            "name": "desktop-msvc",
+            "displayName": "Desktop MSVC (Visual Studio)",
+            "inherits": "base",
+            "generator": "Visual Studio 17 2022",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+        },
+        {
+            "name": "android",
+            "displayName": "Android (stub — requires NDK toolchain)",
+            "inherits": "base",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_SYSTEM_NAME": "Android",
+                "CMAKE_SYSTEM_VERSION": "24",
+                "CMAKE_ANDROID_ARCH_ABI": "arm64-v8a"
+            }
+        },
+        {
+            "name": "ios",
+            "displayName": "iOS (stub — requires Xcode toolchain)",
+            "inherits": "base",
+            "generator": "Xcode",
+            "cacheVariables": {
+                "CMAKE_SYSTEM_NAME": "iOS",
+                "CMAKE_OSX_DEPLOYMENT_TARGET": "14.0",
+                "CMAKE_OSX_ARCHITECTURES": "arm64"
+            },
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" }
+        },
+        {
+            "name": "web",
+            "displayName": "Web / Emscripten (stub — requires emsdk)",
+            "inherits": "base",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_TOOLCHAIN_FILE": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+            }
+        }
+    ],
+    "buildPresets": [
+        { "name": "desktop-debug",          "configurePreset": "desktop-debug" },
+        { "name": "desktop-relwithdebinfo", "configurePreset": "desktop-relwithdebinfo" },
+        { "name": "desktop-release",        "configurePreset": "desktop-release" }
+    ]
+}

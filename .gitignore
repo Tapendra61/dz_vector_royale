@@ -1,0 +1,55 @@
+# Build artifacts
+build/
+build-*/
+out/
+cmake-build-*/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+cmake_install.cmake
+Makefile
+*.dir/
+Debug/
+Release/
+RelWithDebInfo/
+MinSizeRel/
+
+# IDE / editor
+.idea/
+.vscode/
+.vs/
+.cache/
+*.swp
+*.swo
+*.user
+*.suo
+compile_commands.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.dylib
+*.so
+*.exe
+*.pdb
+*.ilk
+
+# Packed assets
+assets.pak
+*.pak
+
+# Logs
+*.log
+logs/
+
+# Private design docs
+docs/roadmap/
