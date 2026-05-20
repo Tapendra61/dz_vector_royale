@@ -49,13 +49,15 @@ void FollowCamera::update(Vector2 target_pos, Vector2 target_velocity, float dt)
     const float target_zoom = base_zoom_ * (1.0f - 0.12f * speed_norm);
     current_zoom_           = current_zoom_ + (target_zoom - current_zoom_) * (1.0f - std::exp(-4.0f * dt));
 
-    // Trauma decays linearly toward 0 each frame.
-    trauma_       = std::max(0.0f, trauma_ - 1.6f * dt);
+    // Trauma decays toward 0; faster decay so accumulated shake fades out
+    // quicker in a busy fight.
+    trauma_       = std::max(0.0f, trauma_ - 2.4f * dt);
     shake_phase_ += dt * 60.0f;
     const float shake_amount = trauma_ * trauma_;
     Vector2 shake{0, 0};
     if (shake_amount > 0.0f) {
-        const float radius = 18.0f * shake_amount;
+        constexpr float kMaxShakeRadius = 9.0f;  // pixels at full trauma
+        const float radius = kMaxShakeRadius * shake_amount;
         shake.x = std::sin(shake_phase_ * 1.13f) * radius * frand(-1.0f, 1.0f);
         shake.y = std::cos(shake_phase_ * 0.97f) * radius * frand(-1.0f, 1.0f);
     }

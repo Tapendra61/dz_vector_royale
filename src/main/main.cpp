@@ -239,8 +239,8 @@ int main(int /*argc*/, char** /*argv*/) {
                     if (outward.x == 0.0f && outward.y == 0.0f) outward = {0.0f, -1.0f};
                     particles.burst(*s, h.position, outward);
                 }
-                if (h.target == player) camera.add_trauma(0.45f);
-                else                    camera.add_trauma(0.12f);
+                if (h.target == player) camera.add_trauma(0.22f);
+                else                    camera.add_trauma(0.04f);
 
                 const float dx = h.position.x - player_pos.x;
                 const float dy = h.position.y - player_pos.y;
@@ -265,7 +265,7 @@ int main(int /*argc*/, char** /*argv*/) {
                 particles.burst(*s, tr.position, {0.0f, -1.0f});
             }
             play_spatial(audio, audio::Cue::Explosion, tr.position, player_pos, kBoomSpat);
-            camera.add_trauma(d.entity == player ? 0.9f : 0.35f);
+            camera.add_trauma(d.entity == player ? 0.55f : 0.14f);
         }
 
         // Pickup events → sparkle / heal burst + distance-attenuated chime.

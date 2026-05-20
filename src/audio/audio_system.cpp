@@ -40,25 +40,37 @@ Wave make_wave(float duration_s, FreqFn freq_hz_at, AmpFn amp_at) {
 
 float exp_decay(float t, float tau) { return std::exp(-t / tau); }
 
+// Compressed-gas release / aerosol-can character: a brief pre-emphasis
+// click, then high-passed white noise with a soft decay tail. No tonal
+// body — all hiss.
 Wave make_fire_wave() {
-    constexpr float dur = 0.20f;
+    constexpr float dur = 0.13f;
     const unsigned  fc  = static_cast<unsigned>(dur * kSampleRate);
     auto* samples = static_cast<std::int16_t*>(std::malloc(fc * sizeof(std::int16_t)));
-    float phase_main = 0.0f;
-    float phase_sub  = 0.0f;
+
+    // Simple one-pole high-pass to push the noise energy into the upper band:
+    //   y[n] = a * (y[n-1] + x[n] - x[n-1])
+    // a ≈ 0.92 puts the corner around 1.5 kHz at 44.1 kHz, which gives a
+    // clearly "psssht" timbre without losing all the body.
+    constexpr float a = 0.92f;
+    float prev_x = 0.0f, prev_y = 0.0f;
+
     for (unsigned i = 0; i < fc; ++i) {
         const float t = static_cast<float>(i) / static_cast<float>(kSampleRate);
-        const float main_f = 90.0f + 430.0f * std::exp(-t / 0.035f);
-        const float sub_f  = 60.0f;
-        phase_main += kTwoPi * main_f / static_cast<float>(kSampleRate);
-        phase_sub  += kTwoPi * sub_f  / static_cast<float>(kSampleRate);
-        const float click_env = 0.40f * std::exp(-t / 0.005f);
-        const float click     = click_env * (static_cast<float>(std::rand()) /
-                                             static_cast<float>(RAND_MAX) * 2.0f - 1.0f);
-        const float body_env  = 0.70f * std::exp(-t / 0.09f);
-        const float body      = body_env * (std::sin(phase_main) * 0.65f
-                                          + std::sin(phase_sub)  * 0.55f);
-        const float v = std::clamp(click + body, -1.0f, 1.0f);
+
+        // Envelope: 3 ms attack, ~80 ms exponential decay tail.
+        const float env = (t < 0.003f)
+            ? (t / 0.003f)
+            : std::exp(-(t - 0.003f) / 0.075f);
+
+        // White noise → high-passed noise.
+        const float x  = static_cast<float>(std::rand()) /
+                         static_cast<float>(RAND_MAX) * 2.0f - 1.0f;
+        const float y  = a * (prev_y + x - prev_x);
+        prev_x = x;
+        prev_y = y;
+
+        const float v = std::clamp(y * env * 0.95f, -1.0f, 1.0f);
         samples[i] = static_cast<std::int16_t>(v * 32000.0f);
     }
     Wave w{};
