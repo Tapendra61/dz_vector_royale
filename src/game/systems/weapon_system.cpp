@@ -21,6 +21,7 @@ void WeaponSystem::tick(ecs::Registry& reg,
                        const WeaponTuning& /*weapon_tune*/,
                        const ShipTuning& ship_tune,
                        float dt) {
+    fires_.clear();
     auto view = reg.view<WeaponComponent, IntentComponent, TransformComponent>();
     for (auto e : view) {
         auto& wpn   = view.get<WeaponComponent>(e);
@@ -60,6 +61,8 @@ void WeaponSystem::tick(ecs::Registry& reg,
         reg.emplace<LifetimeComponent>(b, LifetimeComponent{wpn.bullet_lifetime});
         reg.emplace<RenderComponent>(b, RenderComponent{Shape::Circle, YELLOW, wpn.bullet_radius});
         reg.emplace<EmitterStateComponent>(b);
+
+        fires_.push_back({e, tr.position});
     }
 }
 

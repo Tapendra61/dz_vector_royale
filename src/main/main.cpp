@@ -42,9 +42,11 @@
 #  include <rlImGui.h>
 #endif
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <memory>
+#include <vector>
 
 namespace {
 
@@ -125,7 +127,6 @@ int main(int /*argc*/, char** /*argv*/) {
     game::GamepadInput       gpad;
 
     core::FixedTimestep clock;
-    int                 last_bullet_count = 0;
     bool                show_overlay      = true;
     float               heartbeat_timer   = 0.0f;
 
@@ -167,10 +168,31 @@ int main(int /*argc*/, char** /*argv*/) {
 
         // --- Fx routing: convert this frame's gameplay events to VFX/SFX. ---
 
-        // Bullet firing → fire sfx + per-bullet trail emission.
-        const int now_bullets = world.bullet_count();
-        if (now_bullets > last_bullet_count) audio.play(audio::Cue::Fire, 0.85f);
-        last_bullet_count = now_bullets;
+        // Fire SFX: spatially attenuated by distance from the player so a
+        // dozen bots shooting on the far side of the arena isn't a wall of
+        // noise. Cap simultaneous voices per frame to keep the mix clean.
+        {
+            constexpr float kHearRange         = 900.0f;   // world units
+            constexpr int   kMaxFiresPerFrame  = 3;
+
+            std::vector<float> distances;
+            distances.reserve(world.fires().size());
+            for (const auto& f : world.fires()) {
+                const float dx = f.position.x - player_pos.x;
+                const float dy = f.position.y - player_pos.y;
+                distances.push_back(std::sqrt(dx * dx + dy * dy));
+            }
+            std::sort(distances.begin(), distances.end());
+
+            int played = 0;
+            for (float d : distances) {
+                if (played >= kMaxFiresPerFrame) break;
+                if (d >= kHearRange) continue;
+                const float t = 1.0f - d / kHearRange;
+                audio.play(audio::Cue::Fire, 0.85f * t * t);
+                ++played;
+            }
+        }
 
         // Continuous trail behind each live bullet — each bullet keeps its
         // own fractional-spawn accumulator on its EmitterStateComponent.
