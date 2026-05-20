@@ -65,12 +65,21 @@ World::World(const Tuning& tuning)
     spawn_player();
     spawn_bots(8);  // 1v8 Phase 2 default; tune in JSON later.
 
-    spawn_pickup_point({arena_.center().x,           arena_.center().y - 280.0f}, PowerUpType::RepairPack);
-    spawn_pickup_point({arena_.center().x + 500.0f,  arena_.center().y + 50.0f},  PowerUpType::RepairPack);
-    spawn_pickup_point({arena_.center().x - 500.0f,  arena_.center().y + 50.0f},  PowerUpType::RepairPack);
-    spawn_pickup_point({arena_.center().x,           arena_.center().y + 360.0f}, PowerUpType::RepairPack);
+    // Spread pickup spawn points across the arena instead of hugging the
+    // centre — the big-arena experience needs reasons to move.
+    const Vector2 c   = arena_.center();
+    const float   dx  = arena_.width  * 0.32f;
+    const float   dy  = arena_.height * 0.32f;
+    spawn_pickup_point({c.x,        c.y - dy},  PowerUpType::RepairPack);
+    spawn_pickup_point({c.x,        c.y + dy},  PowerUpType::RepairPack);
+    spawn_pickup_point({c.x - dx,   c.y - dy},  PowerUpType::RepairPack);
+    spawn_pickup_point({c.x + dx,   c.y - dy},  PowerUpType::RepairPack);
+    spawn_pickup_point({c.x - dx,   c.y + dy},  PowerUpType::RepairPack);
+    spawn_pickup_point({c.x + dx,   c.y + dy},  PowerUpType::RepairPack);
+    spawn_pickup_point({c.x - dx,   c.y     },  PowerUpType::RepairPack);
+    spawn_pickup_point({c.x + dx,   c.y     },  PowerUpType::RepairPack);
 
-    VECTOR_INFO("world: player + 8 bots + 4 pickup spawn points");
+    VECTOR_INFO("world: player + 8 bots + 8 pickup spawn points (FFA)");
 }
 
 World::~World() { delete ai_; }

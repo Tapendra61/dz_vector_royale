@@ -23,8 +23,8 @@
         "bullet_radius":     3.0
     },
     "arena": {
-        "width":          2400.0,
-        "height":         1600.0,
+        "width":          6000.0,
+        "height":         4000.0,
         "wall_bounce":       0.4,
         "wall_damage":       0.0
     },

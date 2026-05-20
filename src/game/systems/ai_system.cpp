@@ -61,14 +61,15 @@ Perception perceive(ecs::Registry& reg, ecs::Entity self) {
     const auto& self_tr = reg.get<TransformComponent>(self);
     const auto* self_team = reg.try_get<TeamComponent>(self);
 
-    // Enemies: any ship with HP and a different team.
+    // Enemies: any non-neutral ship with HP that isn't ourselves. Free-for-all —
+    // bots happily target each other as well as the player.
+    (void)self_team;
     reg.view<TransformComponent, VelocityComponent, HealthComponent, TeamComponent>().each(
         [&](ecs::Entity e, const TransformComponent& tr, const VelocityComponent& vel,
             const HealthComponent& hp, const TeamComponent& team) {
             if (e == self) return;
             if (hp.is_dead()) return;
             if (team.team == Team::Neutral) return;
-            if (self_team && team.team == self_team->team) return;
             const float dx = tr.position.x - self_tr.position.x;
             const float dy = tr.position.y - self_tr.position.y;
             const float d2 = dx * dx + dy * dy;

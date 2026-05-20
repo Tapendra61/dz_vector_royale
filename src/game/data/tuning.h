@@ -34,8 +34,8 @@ struct WeaponTuning {
 };
 
 struct ArenaTuning {
-    float width        {2400.0f};
-    float height       {1600.0f};
+    float width        {6000.0f};
+    float height       {4000.0f};
     float wall_bounce  {   0.4f};   // 0 = absorb, 1 = perfect bounce
     float wall_damage  {   0.0f};   // hp/sec while crossing the bound (unused if bounce > 0)
 };
