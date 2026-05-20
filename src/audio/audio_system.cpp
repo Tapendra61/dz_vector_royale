@@ -40,39 +40,69 @@ Wave make_wave(float duration_s, FreqFn freq_hz_at, AmpFn amp_at) {
 
 float exp_decay(float t, float tau) { return std::exp(-t / tau); }
 
-// Compressed-gas release / aerosol-can character: a brief pre-emphasis
-// click, then high-passed white noise with a soft decay tail. No tonal
-// body — all hiss.
+// Gunshot — four layers mixed and softly saturated at the attack:
+//   A) Sharp transient: ~3 ms broadband noise spike (the "crack")
+//   B) Pitched body: sine sweeping 420 → 80 Hz over ~15 ms (the "pop")
+//   C) Bandpassed noise tail: ~50 ms of HP→LP-filtered noise (gun report)
+//   D) Sub-bass thump: 70 Hz sine, ~90 ms decay (chest kick)
+// The peaks of A+B+C+D sum past 1.0, so the attack saturates against the
+// clipper — that overdrive *is* the punchy character.
 Wave make_fire_wave() {
-    constexpr float dur = 0.13f;
+    constexpr float dur = 0.16f;
     const unsigned  fc  = static_cast<unsigned>(dur * kSampleRate);
     auto* samples = static_cast<std::int16_t*>(std::malloc(fc * sizeof(std::int16_t)));
 
-    // Simple one-pole high-pass to push the noise energy into the upper band:
-    //   y[n] = a * (y[n-1] + x[n] - x[n-1])
-    // a ≈ 0.92 puts the corner around 1.5 kHz at 44.1 kHz, which gives a
-    // clearly "psssht" timbre without losing all the body.
-    constexpr float a = 0.92f;
-    float prev_x = 0.0f, prev_y = 0.0f;
+    float phase_sweep = 0.0f;
+    float phase_sub   = 0.0f;
+
+    // Bandpass for layer C: one-pole HP feeding one-pole LP. The cascade
+    // gives a soft midband around 1.5–4 kHz, which is the meaty part of
+    // a gun report.
+    constexpr float hp_a = 0.88f;
+    constexpr float lp_a = 0.40f;
+    float hp_prev_x = 0.0f, hp_prev_y = 0.0f, lp_state = 0.0f;
+
+    auto white = []() {
+        return static_cast<float>(std::rand()) /
+               static_cast<float>(RAND_MAX) * 2.0f - 1.0f;
+    };
 
     for (unsigned i = 0; i < fc; ++i) {
         const float t = static_cast<float>(i) / static_cast<float>(kSampleRate);
 
-        // Envelope: 3 ms attack, ~80 ms exponential decay tail.
-        const float env = (t < 0.003f)
-            ? (t / 0.003f)
-            : std::exp(-(t - 0.003f) / 0.075f);
+        // ---- A) Transient (first 5 ms only) ----
+        float transient = 0.0f;
+        if (t < 0.005f) {
+            const float a_env = std::exp(-t / 0.0015f);
+            transient = a_env * white() * 0.85f;
+        }
 
-        // White noise → high-passed noise.
-        const float x  = static_cast<float>(std::rand()) /
-                         static_cast<float>(RAND_MAX) * 2.0f - 1.0f;
-        const float y  = a * (prev_y + x - prev_x);
-        prev_x = x;
-        prev_y = y;
+        // ---- B) Pitched body sweep ----
+        const float sweep_f = 80.0f + 340.0f * std::exp(-t / 0.012f);
+        phase_sweep += kTwoPi * sweep_f / static_cast<float>(kSampleRate);
+        const float b_env = std::exp(-t / 0.030f);
+        const float body  = std::sin(phase_sweep) * b_env * 0.75f;
 
-        const float v = std::clamp(y * env * 0.95f, -1.0f, 1.0f);
-        samples[i] = static_cast<std::int16_t>(v * 32000.0f);
+        // ---- C) Bandpassed noise tail ----
+        const float n     = white();
+        const float hp    = hp_a * (hp_prev_y + n - hp_prev_x);
+        hp_prev_x = n;
+        hp_prev_y = hp;
+        lp_state += lp_a * (hp - lp_state);
+        const float c_env = std::exp(-t / 0.045f);
+        const float crack = lp_state * c_env * 0.55f;
+
+        // ---- D) Sub-bass thump ----
+        phase_sub += kTwoPi * 70.0f / static_cast<float>(kSampleRate);
+        const float d_env = std::exp(-t / 0.080f);
+        const float thump = std::sin(phase_sub) * d_env * 0.55f;
+
+        const float mix = transient + body + crack + thump;
+        // tanh-style soft clipper: smoother than hard std::clamp.
+        const float v   = mix / (1.0f + std::fabs(mix));
+        samples[i] = static_cast<std::int16_t>(v * 31000.0f);
     }
+
     Wave w{};
     w.frameCount = fc;
     w.sampleRate = kSampleRate;
